@@ -1,0 +1,32 @@
+replicaCount: 1
+
+image:
+  repository: us-central1-docker.pkg.dev/my-gcp-project/hello-gke/frontend
+  tag: dev
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: gce
+  host: hello-gke.dev.example.com
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+
+env:
+  API_URL: "http://api:8081"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+serviceAccount:
+  create: true
+  name: ""

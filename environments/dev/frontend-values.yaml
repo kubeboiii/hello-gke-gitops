@@ -1,0 +1,11 @@
+replicaCount: 1
+
+image:
+  repository: us-central1-docker.pkg.dev/my-gcp-project/hello-gke/frontend
+  tag: dev
+
+ingress:
+  host: hello-gke.dev.example.com
+
+env:
+  API_URL: "http://api:8081"

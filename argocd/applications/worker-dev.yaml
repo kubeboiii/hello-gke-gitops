@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: worker-dev
+  namespace: argocd
+spec:
+  project: hello-gke
+  source:
+    repoURL: https://github.com/YOUR_ORG/hello-gke-gitops.git
+    targetRevision: main
+    path: apps/worker/helm
+    helm:
+      valueFiles:
+        - ../../environments/dev/worker-values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hello-gke
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

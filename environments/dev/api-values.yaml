@@ -1,0 +1,5 @@
+replicaCount: 1
+
+image:
+  repository: us-central1-docker.pkg.dev/my-gcp-project/hello-gke/api
+  tag: dev

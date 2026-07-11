@@ -1,0 +1,6 @@
+apiVersion: v2
+name: api
+description: API Hello World service for hello-gke learning project
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

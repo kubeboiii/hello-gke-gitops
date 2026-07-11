@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: hello-gke
+  namespace: argocd
+spec:
+  description: Learning project for Go microservices on GKE
+  sourceRepos:
+    - "*"
+  destinations:
+    - namespace: hello-gke
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
