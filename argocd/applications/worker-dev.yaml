@@ -11,7 +11,7 @@ spec:
     path: apps/worker/helm
     helm:
       valueFiles:
-        - ../../environments/dev/worker-values.yaml
+        - ../../../environments/dev/worker-values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: hello-gke
