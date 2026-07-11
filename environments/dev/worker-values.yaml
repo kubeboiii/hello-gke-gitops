@@ -1,5 +1,5 @@
 replicaCount: 1
 
 image:
-  repository: us-central1-docker.pkg.dev/my-gcp-project/hello-gke/worker
+  repository: us-central1-docker.pkg.dev/project-3d77e24e-31cb-46da-9bb/hello-gke/worker
   tag: dev
