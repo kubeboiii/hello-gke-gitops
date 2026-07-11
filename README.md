@@ -62,7 +62,7 @@ Update `repoURL` in:
 - `argocd/applications/*.yaml`
 - `bootstrap/argocd/root-app.yaml`
 
-Replace `YOUR_ORG` with your GitHub org or username.
+GitOps repo URL is configured for `https://github.com/kubeboiii/hello-gke-gitops.git`.
 
 ### 5. Deploy applications
 

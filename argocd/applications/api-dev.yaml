@@ -6,7 +6,7 @@ metadata:
 spec:
   project: hello-gke
   source:
-    repoURL: https://github.com/YOUR_ORG/hello-gke-gitops.git
+    repoURL: https://github.com/kubeboiii/hello-gke-gitops.git
     targetRevision: main
     path: apps/api/helm
     helm:
