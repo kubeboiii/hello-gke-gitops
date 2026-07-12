@@ -6,6 +6,7 @@ metadata:
 spec:
   project: hello-gke
   source:
+    # replace with your fork URL after forking hello-gke-gitops
     repoURL: https://github.com/kubeboiii/hello-gke-gitops.git
     targetRevision: main
     path: apps/frontend/helm
