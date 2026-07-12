@@ -1,33 +1,50 @@
 # hello-gke-gitops
 
-GitOps manifests for deploying three Go microservices to GKE with Argo CD.
+Helm charts, environment values, and Argo CD Applications for three Go services on GKE. This repo is **where** and **how** they run. App code and images live in [hello-gke-services](https://github.com/kubeboiii/hello-gke-services).
+
+Argo CD watches this git branch, renders Helm, applies to the `hello-gke` namespace. After bootstrap, app rollouts are git commits, not `kubectl edit`.
+
+**Not for:** prod hardening, multi-env overlays, or auto registry-to-git promotion. First-sync lab.
+
+| | |
+|---|---|
+| **Time** | ~2–3 h first run |
+| **You need** | `gcloud`, `kubectl`, Docker, GCP billing |
+| **You get** | Three Synced Argo apps, one tag-bump exercise, working Ingress curl |
 
 ## Architecture
 
 ```
-GitHub (this repo)
-    │
-    ▼
-Argo CD (watches repo)
-    │
-    ▼
-GKE cluster (hello-gke namespace)
-    ├── frontend (Ingress exposed)
-    ├── api (ClusterIP)
-    └── worker (ClusterIP)
+GitHub (your fork of this repo)
+        │
+        ▼
+Argo CD (argocd namespace)
+        │
+        ▼
+GKE / hello-gke namespace
+├── frontend  → GCE Ingress
+├── api       → ClusterIP
+└── worker    → ClusterIP (no Ingress)
 ```
 
-## Prerequisites
+Traffic: Ingress → frontend → api. Worker proves a third Deployment fits the same GitOps flow without a public route.
 
-- `gcloud`, `kubectl`, `helm`, `argocd` CLI
-- GCP project with billing enabled
-- Container images pushed to Artifact Registry (see `hello-gke-services` repo)
+## Before you start
 
-## Step-by-step lab guide
+1. **Fork this repo.** Argo reads GitHub, not your laptop.
+2. Build and push images from `hello-gke-services` (tag `dev` or your choice).
+3. In your fork: set `repoURL` in `argocd/applications/*-dev.yaml` (comment on that line), replace `my-gcp-project` in `environments/dev/*-values.yaml`, match `image.tag` to what you pushed.
+4. **Commit and push to `main` on your fork** before expecting Argo to sync.
 
-### 1. Create GKE cluster
+```bash
+git add environments/dev argocd/applications
+git commit -m "chore: set project ID and fork repoURL"
+git push origin main
+```
 
-Replace `my-gcp-project` with your project ID.
+## Quick start
+
+### 1. GKE cluster
 
 ```bash
 gcloud config set project my-gcp-project
@@ -35,49 +52,44 @@ gcloud config set project my-gcp-project
 gcloud container clusters create hello-gke \
   --zone us-central1-a \
   --num-nodes 2 \
-  --machine-type e2-medium \
-  --workload-pool=my-gcp-project.svc.id.goog
+  --machine-type e2-medium
 
 gcloud container clusters get-credentials hello-gke --zone us-central1-a
 ```
 
-### 2. Create Artifact Registry (if not done)
+macOS + Homebrew `gcloud`: if `kubectl` fails auth, `source "$(brew --prefix)/share/google-cloud-sdk/path.zsh.inc"`.
+
+### 2. Artifact Registry IAM
+
+If pods sit in `ImagePullBackOff`, grant the compute default SA read access:
 
 ```bash
-gcloud artifacts repositories create hello-gke \
-  --repository-format=docker \
-  --location=us-central1
+gcloud artifacts repositories add-iam-policy-binding hello-gke \
+  --location=us-central1 \
+  --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+  --role="roles/artifactregistry.reader"
 ```
-
-Build and push images from the `hello-gke-services` repo, then update image tags in `environments/dev/*-values.yaml`.
 
 ### 3. Install Argo CD
 
-Follow [bootstrap/argocd/install.md](bootstrap/argocd/install.md).
+[bootstrap/argocd/install.md](bootstrap/argocd/install.md). Port-forward or LoadBalancer for the UI. Lock down anything public-facing when you are done playing.
 
-### 4. Configure repo URLs
+### 4. Apply Applications
 
-Update `repoURL` in:
-
-- `argocd/applications/*.yaml`
-- `bootstrap/argocd/root-app.yaml`
-
-GitOps repo URL is configured for `https://github.com/kubeboiii/hello-gke-gitops.git`.
-
-### 5. Deploy applications
+From your fork clone, after push to `main`:
 
 ```bash
 kubectl apply -f argocd/projects/hello-gke.yaml
 kubectl apply -f argocd/applications/
 ```
 
-Or use App-of-Apps:
+Creates `api-dev`, `frontend-dev`, `worker-dev`. Automated sync uses `prune: true` and `selfHeal: true`. Manual `kubectl` edits get reverted.
 
-```bash
-kubectl apply -f bootstrap/argocd/root-app.yaml
-```
+`valueFiles` paths are relative to the chart (`apps/api/helm`), not the Application file. Use `../../../environments/dev/api-values.yaml`, not `../../...`.
 
-### 6. Verify deployment
+Optional App-of-Apps: `kubectl apply -f bootstrap/argocd/root-app.yaml`.
+
+### 5. Verify
 
 ```bash
 kubectl get applications -n argocd
@@ -85,51 +97,50 @@ kubectl get pods -n hello-gke
 kubectl get ingress -n hello-gke
 ```
 
-Get the external IP (may take a few minutes):
+Ingress external IP can take a few minutes.
+
+**GCE Ingress needs a Host header.** Bare IP curl returns 404 even when pods are fine.
 
 ```bash
-kubectl get ingress frontend -n hello-gke -w
+curl -s -H "Host: hello-gke.dev.example.com" http://<INGRESS_IP>/ | jq
 ```
 
-Test:
+Host is set in `environments/dev/frontend-values.yaml`.
+
+## GitOps image update
+
+1. Change api code in `hello-gke-services`, build with `--platform linux/amd64`, push `api:v2`
+2. Set `tag: v2` in `environments/dev/api-values.yaml`, commit, push your fork
+3. Watch `api-dev` sync. Roll back with `git revert` or set `tag: dev`
 
 ```bash
-curl http://<EXTERNAL_IP>/
+kubectl patch application api-dev -n argocd \
+  -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}' \
+  --type merge
 ```
 
-### 7. Trigger a GitOps update
-
-1. Change `image.tag` in `environments/dev/api-values.yaml`
-2. Commit and push to `main`
-3. Watch Argo CD auto-sync:
-
-```bash
-argocd app get api-dev
-kubectl rollout status deployment/api -n hello-gke
-```
-
-## Repository layout
+## Layout
 
 ```
-hello-gke-gitops/
-├── apps/                    # Helm charts per service
-├── environments/dev/        # Environment-specific values
-├── argocd/
-│   ├── applications/        # Argo CD Application CRDs
-│   └── projects/            # Argo CD AppProject
-├── bootstrap/argocd/        # Argo CD install + root app
-└── LEARNING_PATH.md         # Hands-on exercises
+apps/<service>/helm/       # Charts (Deployment, Service, Ingress on frontend)
+environments/dev/          # Image tags, ingress host, replica counts
+argocd/applications/       # Application CRDs
+argocd/projects/           # hello-gke AppProject
+bootstrap/argocd/          # Install notes + optional root app
 ```
 
 ## Troubleshooting
 
-| Symptom | Check |
-|---------|-------|
-| `ImagePullBackOff` | Image exists in Artifact Registry; tag matches values file; GKE nodes can pull from GAR |
-| App `OutOfSync` | Run `argocd app diff <app-name>`; check Helm value file paths |
-| Ingress has no IP | Wait 5–10 min; verify GCE ingress controller; check `kubectl describe ingress` |
-| Probe failures | `kubectl logs -n hello-gke deploy/<service>`; verify `/health` responds |
-| Frontend 502 | API pod must be running; check `API_URL` env var |
+| Symptom | Likely cause | Fix |
+|---------|----------------|-----|
+| Argo sync error, values path not found | Wrong `valueFiles` depth (`../../` vs `../../../`) | Fix all three Application files, push |
+| `ImagePullBackOff` | GAR IAM or wrong tag in values | IAM binding above; tag must exist in registry |
+| `exec format error` | arm64 image on amd64 nodes | `docker build --platform linux/amd64`, use a new tag |
+| `curl` to Ingress IP → 404 | Missing Host header | `curl -H "Host: hello-gke.dev.example.com" ...` |
+| Argo UI stale after push | Cache | Hard refresh annotation above |
+| Frontend 502 | api pod down | `kubectl logs -n hello-gke deploy/api` |
+
+Hit something else? [Open an issue](https://github.com/kubeboiii/hello-gke-gitops/issues) with symptom and `kubectl describe pod` events.
 
 ## Cleanup
 
@@ -137,13 +148,9 @@ hello-gke-gitops/
 gcloud container clusters delete hello-gke --zone us-central1-a
 ```
 
-## Next steps
+A two-node `e2-medium` cluster left running will show up on your bill. Delete it when the lab is over.
 
-- Workload Identity for GAR image pull (no imagePullSecrets)
-- Argo CD Image Updater for automatic tag bumps
-- Staging environment overlay in `environments/staging/`
-- External Secrets Operator with GCP Secret Manager
+## Related
 
-## Related repo
-
-Application source code: `hello-gke-services`
+- App repo: [hello-gke-services](https://github.com/kubeboiii/hello-gke-services)
+- Extra drills: [LEARNING_PATH.md](LEARNING_PATH.md) (scale, probes, rollback)
